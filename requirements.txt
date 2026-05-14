@@ -1,16 +1,10 @@
-# Data Manipulation & Analysis	
-pandas==2.2.3
-numpy==2.2.2
-
-# Machine Learning & Optimization
-scikit-learn==1.8.0
-imbalanced-learn==0.14.1
-jupyter==1.0.0
-
-# Visualization & Reporting
-matplotlib==3.10.0
-seaborn==0.13.2
-
-# Deployment & Dashboarding
-streamlit==1.54.0
-
+streamlit
+pandas
+numpy
+scikit-learn
+xgboost
+imbalanced-learn
+matplotlib
+seaborn
+joblib
+plotly
