@@ -216,8 +216,8 @@ elif page == "Fraud Prediction":
             )   
 
 elif page == "Credit Risk Prediction":
-    st.header("Credit Risk Prediction")
 
+    st.header("Credit Risk Prediction")
     st.write("Enter applicant details to predict loan approval risk.")
 
     col1, col2 = st.columns(2)
@@ -251,34 +251,68 @@ elif page == "Credit Risk Prediction":
         "Property_Area": property_area
     }])
 
-    for col in input_credit.select_dtypes(include="object").columns:
+    # Encode categorical columns
+    categorical_cols = ["Gender", "Married", "Dependents", "Education", "Self_Employed", "Property_Area"]
+
+    for col in categorical_cols:
         input_credit[col] = credit_label_encoders[col].transform(input_credit[col])
 
-    input_credit = input_credit[credit_feature_columns]
+    # Feature engineering
+    input_credit["Total_Income"] = input_credit["ApplicantIncome"] + input_credit["CoapplicantIncome"]
+    input_credit["Total_Income_Log"] = np.log1p(input_credit["Total_Income"])
+    input_credit["LoanAmount_Log"] = np.log1p(input_credit["LoanAmount"])
+    input_credit["Debt_Income_Ratio"] = input_credit["LoanAmount"] / (input_credit["Total_Income"] + 1)
 
-    input_scaled = credit_scaler.transform(input_credit)
+    if input_credit["Total_Income"].iloc[0] > 20000:
+        st.warning(
+            "This income value is much higher than most training data. "
+            "Prediction may be less reliable for extreme income values."
+        )
+
+    # Final feature columns used during model training
+    credit_feature_columns = [
+        "Credit_History",
+        "Total_Income_Log",
+        "LoanAmount_Log",
+        "Debt_Income_Ratio",
+        "Married",
+        "Education",
+        "Property_Area"
+    ]
+
+    input_ready = input_credit[credit_feature_columns]
 
     if st.button("Predict Credit Risk"):
-        prediction = credit_model.predict(input_scaled)[0]
-        probability = credit_model.predict_proba(input_scaled)[0][1]
+
+        prediction = credit_model.predict(input_ready)[0]
+        probability = credit_model.predict_proba(input_ready)[0]
+
+        rejection_prob = probability[0]
+        approval_prob = probability[1]
 
         st.subheader("Prediction Result")
 
         col1, col2 = st.columns(2)
 
-        col1.metric("Loan Approval Probability", f"{probability * 100:.2f}%")
+        col1.metric("Loan Approval Probability", f"{approval_prob * 100:.2f}%")
+        col2.metric("Credit Risk Probability", f"{rejection_prob * 100:.2f}%")
 
         if prediction == 1:
-            col2.success("✅ Loan Approved / Low Credit Risk")
+            st.success("✅ Loan Approved / Low Credit Risk")
         else:
-            col2.error("❌ Loan Rejected / High Credit Risk")
+            st.error("❌ Loan Rejected / High Credit Risk")
 
-        if probability >= 0.75:
+        st.subheader("Risk Interpretation")
+
+        if approval_prob >= 0.75:
             st.success("The applicant has a strong credit profile.")
-        elif probability >= 0.50:
+        elif approval_prob >= 0.50:
             st.warning("The applicant has moderate credit risk.")
         else:
-            st.error("The applicant has high credit risk.")                 
+            st.error("The applicant has high credit risk.")
+
+        st.subheader("Input Summary")
+        st.dataframe(input_ready)
 
 elif page == "EDA Dashboard":
     st.header("Exploratory Data Analysis")
@@ -360,7 +394,7 @@ elif page == "Model Insights":
     with tab2:
         st.subheader("Credit Risk Model")
 
-        st.write("Final Model: Logistic Regression")
+        st.write("Final Model: Random Forest Classifier")
 
         credit_results = pd.read_csv(os.path.join(BASE_DIR, "reports", "credit_model_results.csv"))
 
@@ -368,8 +402,37 @@ elif page == "Model Insights":
         st.dataframe(credit_results, width="stretch")
 
         st.success("""
-        Logistic Regression was selected because it achieved the highest F1-score,
-        strong accuracy, and very high recall for loan approval prediction.
+        Random Forest was selected as the final model because it provided a good balance
+        between prediction performance and interpretability. Although XGBoost achieved
+        slightly higher accuracy, Random Forest showed healthier feature importance
+        distribution by considering Credit History, Debt-Income Ratio, Income, and Loan Amount
+        together instead of depending too heavily on one feature.
+        """)
+
+        st.subheader("SHAP Explainability Analysis")
+
+        st.write("""
+        SHAP analysis explains how each feature influences the model's loan approval prediction.
+        Positive SHAP values push the prediction toward loan approval, while negative SHAP values
+        push the prediction toward rejection or higher credit risk.
+        """)
+
+        st.image(
+        os.path.join(BASE_DIR, "reports", "credit_shap_summary.png"),
+        caption="SHAP Summary Plot for Credit Risk Model"
+        )
+
+        st.markdown("""
+        ### Key Insights from SHAP
+
+        - **Credit_History** is the strongest factor in loan approval prediction.
+        - **Debt_Income_Ratio** is an important affordability indicator.
+        - **LoanAmount_Log** shows the effect of loan burden on approval chances.
+        - **Total_Income_Log** contributes moderately, but the model does not depend only on income.
+        - **Married, Education, and Property_Area** have smaller but useful effects.
+
+        This shows that the Random Forest model is using multiple financial indicators
+        instead of relying only on Credit History.
         """)
 
 elif page == "Business Recommendations":
@@ -401,7 +464,7 @@ elif page == "Business Recommendations":
         st.write("""
         - Credit history is one of the most important factors in loan approval.
         - Applicant income, loan amount, and property area help assess repayment risk.
-        - Logistic Regression is suitable for credit scoring because it is interpretable.
+        - Random Forest is suitable for credit scoring because it provides good performance and interpretability.
         - Medium-risk applicants should be reviewed manually before rejection.
         - The credit risk model can support faster and more consistent loan decisions.
         """)
